@@ -10,8 +10,8 @@ templates = Jinja2Templates(directory="templates")  # html folder path
 
 # camera configuration
 cameras = {
-    1: cv2.VideoCapture("http://10.14.14.186:4747/video") # 1 is camera id for phone camera
-    # 1: cv2.VideoCapture("rtsp://username:password@CAMERA_IP:554/stream1") # 1 is camera id for cctv camera
+    # 1: cv2.VideoCapture("http://10.14.14.186:4747/video") # 1 is camera id for phone camera
+    1: cv2.VideoCapture("rtsp://username:password@CAMERA_IP:554/stream1") # for cctv camera
 }
 
 
