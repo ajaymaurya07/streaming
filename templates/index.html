@@ -1,13 +1,155 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Live Stream</title>
+    <title>Live Camera Streaming</title>
+
+    <style>
+        *{
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #0f172a;
+            color: white;
+            height: 100vh;
+            overflow: hidden;   /* 👈 Scroll completely off */
+        }
+
+        /* Camera section */
+        .container {
+            display: flex;
+            width: 100vw;
+            height: 75vh;   /* Top 75% */
+        }
+
+        .camera {
+            width: 50%;
+            height: 100%;
+            padding: 5px;
+        }
+
+        .camera img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 12px;
+            border: 2px solid #38bdf8;
+        }
+
+        /* Control panel */
+        .controls {
+            height: 25vh;   /* Bottom 25% */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: #020617;
+            padding: 10px;
+        }
+
+        .controls input {
+            width: 280px;
+            padding: 10px;
+            font-size: 16px;
+            border-radius: 6px;
+            border: none;
+            outline: none;
+            margin-bottom: 12px;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 20px;
+        }
+
+        button {
+            padding: 10px 28px;
+            font-size: 15px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.3s;
+        }
+
+        .start-btn {
+            background: #22c55e;
+            color: black;
+        }
+
+        .stop-btn {
+            background: #ef4444;
+            color: white;
+        }
+
+        .status {
+            margin-top: 8px;
+            font-size: 14px;
+            color: #38bdf8;
+        }
+    </style>
 </head>
+
 <body>
 
-<h2>Live Camera Streaming</h2>
+<!-- Camera View -->
+<div class="container">
+    <div class="camera">
+        <img src="/video_feed/1">
+    </div>
 
-<img src="/video_feed/1" width="60%">
+<!--    <div class="camera">-->
+<!--        <img src="/video_feed/2">-->
+<!--    </div>-->
+</div>
+
+<!-- Controls -->
+<div class="controls">
+
+    <div class="btn-group">
+        <button class="start-btn" onclick="startRecording()">Order Start Preparing</button>
+        <button class="stop-btn" onclick="stopRecording()">Order Prepared</button>
+    </div>
+
+    <div class="status" id="statusText">Status: Idle</div>
+
+</div>
+
+<script>
+
+function generateOrderId() {
+    return "ORD" + Math.floor(100000 + Math.random() * 900000);
+}
+
+function startRecording() {
+
+
+    let order = generateOrderId();
+
+    fetch(`/start/${order}`, {method:"POST"})
+      .then(res => res.json())
+      .then(data => {
+
+          document.getElementById("statusText").innerText =
+              "Status: " + data.status +
+              " | Order ID: " + data.order;
+
+      });
+
+}
+
+function stopRecording() {
+
+    fetch(`/stop`, {method:"POST"})
+      .then(res => res.json())
+      .then(data => {
+          document.getElementById("statusText").innerText =
+              "Status: " + data.status;
+      });
+}
+</script>
 
 </body>
 </html>
