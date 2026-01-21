@@ -1,7 +1,7 @@
 import threading
 import cv2
 from fastapi import FastAPI
-from fastapi.responses import StreamingResponse, HTMLResponse
+from fastapi.responses import StreamingResponse
 from fastapi.templating import Jinja2Templates
 from fastapi import Request
 import time
@@ -12,6 +12,7 @@ recording = False
 writers = {}
 start_time = None
 record_thread = None
+current_order = None
 
 templates = Jinja2Templates(directory="templates")  # html folder path
 
@@ -34,7 +35,7 @@ def gen_frames(camera_id):
         ret, buffer = cv2.imencode('.jpg', frame)
         frame = buffer.tobytes()
         yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')  #Browser ko continuous images bhejne ke liye
+               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')  #Browser ko continuous images bend ke lie
 
 @app.get("/")
 def index(request: Request):
@@ -88,12 +89,13 @@ def record_all_cameras(order_id):
 # START recording API
 @app.post("/start/{order_id}")
 def start_recording(order_id: str):
-    global recording, record_thread
+    global recording, record_thread, current_order
 
     if recording:
         return {"status": "Already recording"}
 
     recording = True
+    current_order = order_id
 
     record_thread = threading.Thread(
         target=record_all_cameras,
@@ -127,4 +129,140 @@ def stop_recording():
         except:
             pass
     writers.clear()
+
+    # PROCESS
+    clips = process_all_cameras(current_order, [1])
+
+    final_video = f"final_highlight_{current_order}.mp4"
+    merge_clips_opencv(clips, final_video)
     return {"status": "Recording stopped & saved"}
+
+
+def detect_key_moments(video_path, top_k=6):
+
+    cap = cv2.VideoCapture(video_path)
+
+    prev = None
+    motion_scores = []
+    frame_no = 0
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+        if prev is not None:
+            diff = cv2.absdiff(prev, gray)
+            score = diff.sum()
+            motion_scores.append((frame_no, score))
+
+        prev = gray
+        frame_no += 1
+
+    cap.release()
+
+    motion_scores.sort(key=lambda x: x[1], reverse=True)
+
+    return motion_scores[:top_k]
+
+
+
+def frame_to_time(frame_no, fps):
+    return frame_no / fps
+
+
+
+def extract_clip_opencv(video, start_sec, duration, out):
+
+    cap = cv2.VideoCapture(video)
+    fps = cap.get(cv2.CAP_PROP_FPS)
+
+    start_frame = int(start_sec * fps)
+    end_frame = int((start_sec + duration) * fps)
+
+    cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+
+    ret, frame = cap.read()
+    if not ret:
+        cap.release()
+        return
+
+    h, w, _ = frame.shape
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    writer = cv2.VideoWriter(out, fourcc, fps, (w, h))
+
+    frame_no = start_frame
+
+    while frame_no <= end_frame:
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        writer.write(frame)
+        frame_no += 1
+
+    cap.release()
+    writer.release()
+
+
+
+def process_all_cameras(order, camera_ids=[1]):
+
+    clips = []
+
+    for cam in camera_ids:
+
+        video = f"record_{order}_cam{cam}.mp4"
+
+        moments = detect_key_moments(video)
+
+        cap = cv2.VideoCapture(video)
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        cap.release()
+
+        for i,(frame,_) in enumerate(moments[:3]): # best moment 3 every camera recording
+
+            start = frame_to_time(frame,fps)
+            out = f"clip_cam{cam}_{i}.mp4"
+
+            extract_clip_opencv(video,start,4,out)
+            clips.append(out)
+
+    return clips
+
+
+
+def merge_clips_opencv(clips, output):
+
+    if len(clips) == 0:
+        print("No clips to merge")
+        return
+
+    first = cv2.VideoCapture(clips[0])
+    fps = first.get(cv2.CAP_PROP_FPS)
+
+    ret, frame = first.read()
+    if not ret:
+        return
+
+    h, w, _ = frame.shape
+    first.release()
+
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    writer = cv2.VideoWriter(output, fourcc, fps, (w, h))
+
+    for clip in clips:
+
+        cap = cv2.VideoCapture(clip)
+
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            writer.write(frame)
+
+        cap.release()
+
+    writer.release()
